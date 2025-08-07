@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DMark</title>
+  <link rel="icon" href="./DMark_logo.svg" type="image/svg+xml">
+  <link href="./output.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-ctp-base text-ctp-text">
+  <div class="container mx-auto px-4 py-6">
+    <div class="flex items-center mb-4">
+      <img src="./DMark_logo.svg" alt="DMark Logo" width="48" height="48" class="mr-3">
+      <h1 class="text-3xl font-bold text-ctp-mauve">DMark</h1>
+    </div>
+    
+    <div id="current-path" class="bg-ctp-mantle text-ctp-subtext0 text-sm px-4 py-2 rounded-lg mb-4 font-mono"></div>
+    
+    <div class="flex flex-wrap gap-3 my-12">
+      <button id="create-folder" class="bg-ctp-green hover:bg-ctp-teal text-ctp-base font-medium text-sm py-2 px-4 rounded-lg transition duration-200 ease-in-out transform hover:scale-105">Create Folder</button>
+      <button id="delete-selected" class="bg-ctp-red hover:bg-ctp-maroon text-ctp-base font-medium text-sm py-2 px-4 rounded-lg hidden transition duration-200 ease-in-out transform hover:scale-105">Delete Selected</button>
+    </div>
+    
+    <ul id="file-list" class="space-y-2 mb-6"></ul>
+    <div id="content" class="prose prose-invert max-w-none p-6 bg-ctp-mantle rounded-xl shadow-lg hidden"></div>
+
+    <div id="back-button-container" class="mt-6"></div>
+  </div>
+
+  <script>
+    const fileList = document.getElementById('file-list');
+    const contentDiv = document.getElementById('content');
+    const createFolderBtn = document.getElementById('create-folder');
+    const deleteSelectedBtn = document.getElementById('delete-selected');
+    const urlParams = new URLSearchParams(window.location.search);
+    const file = urlParams.get('file');
+    let selectedFiles = [];
+
+    function renderFileTree(files, parentElement, path = '') {
+      files.forEach(file => {
+        const li = document.createElement('li');
+        li.classList.add('bg-ctp-mantle', 'rounded-lg', 'p-3', 'hover:bg-ctp-surface0', 'transition', 'duration-200', 'ease-in-out');
+        
+        if (file.type === 'folder') {
+          const itemContainer = document.createElement('div');
+          itemContainer.classList.add('flex', 'items-center', 'justify-between');
+          
+          const leftContainer = document.createElement('div');
+          leftContainer.classList.add('flex', 'items-center');
+          
+          const a = document.createElement('a');
+          a.textContent = `📁 ${file.name}`;
+          a.href = `?path=${path}${file.name}`;
+          a.classList.add('text-ctp-mauve', 'hover:underline', 'font-medium', 'text-lg', 'block');
+          leftContainer.appendChild(a);
+          
+          itemContainer.appendChild(leftContainer);
+
+          const buttonContainer = document.createElement('div');
+          buttonContainer.classList.add('flex', 'gap-2');
+
+          const moveBtn = document.createElement('button');
+          moveBtn.textContent = 'Move';
+          moveBtn.classList.add('bg-ctp-yellow', 'hover:bg-ctp-rosewater', 'text-ctp-base', 'font-medium', 'text-sm', 'py-1', 'px-3', 'rounded-lg', 'transition', 'duration-200');
+          moveBtn.addEventListener('click', () => handleMove(`${path}${file.name}`, 'folder'));
+          buttonContainer.appendChild(moveBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.classList.add('bg-ctp-red', 'hover:bg-ctp-maroon', 'text-ctp-base', 'font-medium', 'text-sm', 'py-1', 'px-3', 'rounded-lg', 'transition', 'duration-200');
+          deleteBtn.addEventListener('click', () => handleDelete(`${path}${file.name}`, 'folder'));
+          buttonContainer.appendChild(deleteBtn);
+
+          itemContainer.appendChild(buttonContainer);
+          li.appendChild(itemContainer);
+        } else {
+          const itemContainer = document.createElement('div');
+          itemContainer.classList.add('flex', 'items-center', 'justify-between');
+          
+          const leftContainer = document.createElement('div');
+          leftContainer.classList.add('flex', 'items-center');
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = `${path}${file.name}`;
+          checkbox.classList.add('mr-3', 'file-checkbox', 'w-5', 'h-5', 'accent-ctp-green');
+          checkbox.addEventListener('change', handleFileSelection);
+          leftContainer.appendChild(checkbox);
+
+          const a = document.createElement('a');
+          a.textContent = file.name;
+          a.href = `?file=${path}${file.name}`;
+          a.classList.add('text-ctp-blue', 'hover:underline', 'font-medium', 'text-lg');
+          leftContainer.appendChild(a);
+          
+          itemContainer.appendChild(leftContainer);
+
+          const buttonContainer = document.createElement('div');
+          buttonContainer.classList.add('flex', 'gap-2');
+
+          const moveBtn = document.createElement('button');
+          moveBtn.textContent = 'Move';
+          moveBtn.classList.add('bg-ctp-yellow', 'hover:bg-ctp-rosewater', 'text-ctp-base', 'font-medium', 'text-sm', 'py-1', 'px-3', 'rounded-lg', 'transition', 'duration-200');
+          moveBtn.addEventListener('click', () => handleMove(`${path}${file.name}`));
+          buttonContainer.appendChild(moveBtn);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.classList.add('bg-ctp-red', 'hover:bg-ctp-maroon', 'text-ctp-base', 'font-medium', 'text-sm', 'py-1', 'px-3', 'rounded-lg', 'transition', 'duration-200');
+          deleteBtn.addEventListener('click', () => handleDelete(`${path}${file.name}`));
+          buttonContainer.appendChild(deleteBtn);
+
+          itemContainer.appendChild(buttonContainer);
+          li.appendChild(itemContainer);
+        }
+        parentElement.appendChild(li);
+      });
+    }
+
+    function handleFileSelection(e) {
+      const filePath = e.target.value;
+      if (e.target.checked) {
+        selectedFiles.push(filePath);
+      } else {
+        selectedFiles = selectedFiles.filter(f => f !== filePath);
+      }
+      
+      // 显示/隐藏批量删除按钮
+      deleteSelectedBtn.classList.toggle('hidden', selectedFiles.length === 0);
+    }
+
+    function handleMove(filePath, type = 'file') {
+      fetch(`http://${window.location.hostname}:3001/folders`)
+        .then(response => response.json())
+        .then(folders => {
+          const modal = document.createElement('div');
+          modal.classList.add('fixed', 'inset-0', 'bg-black', 'bg-opacity-50', 'flex', 'items-center', 'justify-center', 'z-50');
+
+          const modalContent = document.createElement('div');
+          modalContent.classList.add('bg-ctp-base', 'p-4', 'rounded-lg', 'max-w-xs', 'w-full', 'mx-2');
+
+          const title = document.createElement('h2');
+          title.textContent = `Move ${type === 'folder' ? '📁 ' : ''}${filePath}`;
+          title.classList.add('text-lg', 'font-bold', 'mb-2');
+          modalContent.appendChild(title);
+
+          const folderList = document.createElement('ul');
+          folderList.classList.add('max-h-40', 'overflow-y-auto');
+          folders.forEach(folder => {
+            // 不允许将文件夹移动到自身或其子文件夹中
+            if (type === 'folder' && (folder === filePath || folder.startsWith(`${filePath}/`))) {
+              return;
+            }
+            
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.textContent = folder === '.' ? 'Root' : folder;
+            btn.classList.add('w-full', 'text-left', 'py-2', 'px-3', 'hover:bg-ctp-surface0', 'rounded', 'text-sm');
+            btn.addEventListener('click', () => {
+              const destination = folder;
+              let newPath;
+              if (type === 'folder') {
+                const folderName = filePath.split('/').pop();
+                newPath = destination === '.' ? folderName : `${destination}/${folderName}`;
+              } else {
+                newPath = destination === '.' ? filePath.split('/').pop() : `${destination}/${filePath.split('/').pop()}`;
+              }
+              
+              fetch(`http://${window.location.hostname}:3001/move`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                  oldPath: filePath, 
+                  newPath,
+                  type // 添加类型信息
+                })
+              })
+              .then(response => response.json())
+              .then(data => {
+                console.log(data);
+                location.reload();
+              })
+              .catch(error => {
+                console.error(error);
+              });
+            });
+            li.appendChild(btn);
+            folderList.appendChild(li);
+          });
+          modalContent.appendChild(folderList);
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.textContent = 'Cancel';
+          cancelBtn.classList.add('bg-ctp-red', 'text-ctp-base', 'font-medium', 'py-1', 'px-3', 'rounded', 'mt-2', 'text-sm');
+          cancelBtn.addEventListener('click', () => {
+            modal.remove();
+          });
+          modalContent.appendChild(cancelBtn);
+
+          modal.appendChild(modalContent);
+          document.body.appendChild(modal);
+        });
+    }
+
+    function handleDelete(filePath, type = 'file') {
+      const itemType = type === 'folder' ? 'folder' : 'file';
+      if (confirm(`Are you sure you want to delete the ${itemType} "${filePath}"?`)) {
+        // 对于文件夹，我们需要使用不同的端点
+        const url = type === 'folder' ? 
+          `http://${window.location.hostname}:3001/folders/${filePath}` : 
+          `http://${window.location.hostname}:3001/delete/${filePath}`;
+          
+        const options = type === 'folder' ? 
+          { method: 'DELETE' } : 
+          { method: 'DELETE' };
+          
+        fetch(url, options)
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);
+          location.reload();
+        })
+        .catch(error => {
+          console.error(error);
+        });
+      }
+    }
+
+    deleteSelectedBtn.addEventListener('click', () => {
+      if (selectedFiles.length > 0 && confirm(`Are you sure you want to delete ${selectedFiles.length} file(s)?`)) {
+        // 创建一个删除所有选中文件的Promise数组
+        const deletePromises = selectedFiles.map(filePath => {
+          return fetch(`http://${window.location.hostname}:3001/delete/${filePath}`, {
+            method: 'DELETE'
+          });
+        });
+
+        // 等待所有删除操作完成
+        Promise.all(deletePromises)
+          .then(() => {
+            location.reload();
+          })
+          .catch(error => {
+            console.error('Error deleting files:', error);
+          });
+      }
+    });
+
+    const path = urlParams.get('path') || '';
+    if (path) {
+      const backButtonContainer = document.getElementById('back-button-container');
+      const backButton = document.createElement('button');
+      backButton.textContent = 'Back';
+      backButton.classList.add('bg-ctp-blue', 'text-ctp-base', 'font-medium', 'text-sm', 'py-1', 'px-2', 'rounded');
+      backButton.addEventListener('click', () => {
+        const parts = path.split('/');
+        parts.pop();
+        const parentPath = parts.join('/');
+        window.location.href = parentPath ? `?path=${parentPath}` : '/';
+      });
+      backButtonContainer.appendChild(backButton);
+    }
+
+    if (file) {
+      document.getElementById('file-list').classList.add('hidden');
+      document.getElementById('create-folder').classList.add('hidden');
+      deleteSelectedBtn.classList.add('hidden');
+      document.getElementById('current-path').classList.add('hidden');
+      
+      // 显示content元素
+      contentDiv.classList.remove('hidden');
+
+      const backButtonContainer = document.getElementById('back-button-container');
+      const backButton = document.createElement('button');
+      backButton.textContent = 'Back';
+      backButton.classList.add('bg-ctp-blue', 'text-ctp-base', 'font-medium', 'text-sm', 'py-1', 'px-2', 'rounded');
+      backButton.addEventListener('click', () => {
+        const parts = file.split('/');
+        parts.pop();
+        const parentPath = parts.join('/');
+        window.location.href = parentPath ? `?path=${parentPath}` : '/';
+      });
+      backButtonContainer.appendChild(backButton);
+
+      fetch(`http://${window.location.hostname}:3001/content/${file}`)
+        .then(response => response.text())
+        .then(text => {
+          contentDiv.innerHTML = marked.parse(text);
+        });
+    } else {
+      // 隐藏content元素
+      contentDiv.classList.add('hidden');
+      
+      // 确保其他元素可见
+      document.getElementById('file-list').classList.remove('hidden');
+      document.getElementById('create-folder').classList.remove('hidden');
+      document.getElementById('current-path').classList.remove('hidden');
+      
+      fetch(`http://${window.location.hostname}:3001/files?path=${path}`)
+        .then(response => response.json())
+        .then(data => {
+          // 显示当前路径
+          const currentPathDiv = document.getElementById('current-path');
+          currentPathDiv.textContent = `Current path: ${data.currentPath || '/'}`;
+          
+          renderFileTree(data.files, fileList, path ? `${path}/` : '');
+        });
+    }
+
+    createFolderBtn.addEventListener('click', () => {
+      const folderName = prompt('Enter folder name:');
+      if (folderName) {
+        fetch(`http://${window.location.hostname}:3001/folders`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ folderName: folderName })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);
+          location.reload();
+        })
+        .catch(error => {
+          console.error(error);
+        });
+      }
+    });
+
+    function getCurrentFolder() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const file = urlParams.get('file');
+      if (file) {
+        const parts = file.split('/');
+        parts.pop();
+        return parts.join('/');
+      }
+      return '';
+    }
+  </script>
+</body>
+</html>
