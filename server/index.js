@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const https = require('https');
 require('dotenv').config();
 
 const app = express();
@@ -63,12 +64,48 @@ app.post('/upload', (req, res) => {
       console.log(`File written successfully: ${uniqueFilename}`);
       const barkUrl = process.env.BARK_URL;
       if (barkUrl) {
-        axios.get(barkUrl)
-          .then(response => {
-            console.log('Bark notification sent');
+        // 添加重试机制和更详细的错误处理
+        const sendBarkNotification = async (url, retries = 3) => {
+          // 创建自定义HTTPS代理，忽略证书验证问题
+          const httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+            keepAlive: true,
+            timeout: 5000
+          });
+
+          for (let i = 0; i < retries; i++) {
+            try {
+              console.log(`Attempting to send Bark notification (attempt ${i + 1}/${retries})`);
+              const response = await axios.get(url, { 
+                timeout: 5000,
+                httpsAgent: httpsAgent
+              });
+              console.log('Bark notification sent successfully:', response.status);
+              return response;
+            } catch (error) {
+              console.error(`Error sending Bark notification (attempt ${i + 1}/${retries}):`, {
+                message: error.message,
+                code: error.code,
+                response: error.response ? error.response.status : 'N/A'
+              });
+              
+              // 如果是最后一次尝试，抛出错误
+              if (i === retries - 1) {
+                throw error;
+              }
+              
+              // 等待一段时间后重试
+              await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            }
+          }
+        };
+
+        sendBarkNotification(barkUrl)
+          .then(() => {
+            console.log('Bark notification completed');
           })
           .catch(error => {
-            console.error('Error sending Bark notification:', error);
+            console.error('Failed to send Bark notification after all retries:', error.message);
           });
       } else {
         console.log('BARK_URL not configured, skipping notification');
